@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="一个自己做的背单词网站：记忆曲线复习、翻卡片、选择题测验、批量导入。">
+<title>我的单词卡</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: one column, tab bar on top, a big index card as the centrepiece; card ruled like a real index card */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --fg:#1b2430; --muted:#5d6876; --line:#d6dce3;
+  --rule:#cfe0ef; --margin:#e8a0a0; --accent:#1f5f8b; --accent-ink:#ffffff; --hl:#ffe36e;
+  --good:#2f7d4f; --warn:#b5651d;
+  --f-display:"Bricolage Grotesque","Noto Sans SC",system-ui,sans-serif;
+  --f-body:"Noto Sans SC",system-ui,-apple-system,"PingFang SC",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12171d; --surface:#1b222b; --fg:#e7ecf1; --muted:#9aa6b3; --line:#2c3642;
+  --rule:#26384a; --margin:#7a3c3c; --accent:#6fb1df; --accent-ink:#0d1620; --hl:#8a7420;
+  --good:#6cc28f; --warn:#e3a066; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d; --surface:#1b222b; --fg:#e7ecf1; --muted:#9aa6b3; --line:#2c3642;
+  --rule:#26384a; --margin:#7a3c3c; --accent:#6fb1df; --accent-ink:#0d1620; --hl:#8a7420;
+  --good:#6cc28f; --warn:#e3a066; color-scheme:dark}
+*{box-sizing:border-box}
+html{color-scheme:light}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px}
+h1{font-family:var(--f-display);font-weight:700;font-size:1.75rem;margin:0;letter-spacing:-.01em}
+h1 span{background:linear-gradient(transparent 60%,var(--hl) 60%)}
+.stats{font-family:var(--f-mono);font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px}
+.tabs button{border:0;background:none;color:var(--muted);font:500 .95rem var(--f-body);padding:6px 14px;border-radius:7px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+select,input,textarea{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+select{width:auto}
+textarea{min-height:120px;resize:vertical;font-family:var(--f-mono);font-size:.85rem}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--fg);font:500 .92rem var(--f-body);padding:8px 14px;border-radius:8px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.good{border-color:var(--good);color:var(--good)}
+.btn.warn{border-color:var(--warn);color:var(--warn)}
+.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row.center{justify-content:center}
+.note{color:var(--muted);font-size:.85rem}
+
+/* index card */
+.scene{perspective:1400px}
+.card{position:relative;height:300px;cursor:pointer;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.3,.7,.2,1)}
+.card.flipped{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;border-radius:6px;background:var(--surface);
+  box-shadow:0 1px 0 var(--line),0 10px 28px -14px rgba(20,40,60,.35);
+  background-image:linear-gradient(var(--margin),var(--margin)),repeating-linear-gradient(transparent 0 31px,var(--rule) 31px 32px);
+  background-size:100% 2px,100% 100%;background-position:0 56px,0 56px;background-repeat:no-repeat,repeat;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 24px 24px;text-align:center}
+.face.back{transform:rotateY(180deg)}
+.face .tag{position:absolute;top:16px;left:20px;font-family:var(--f-mono);font-size:.72rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.face .pos{position:absolute;top:16px;right:20px;font-family:var(--f-mono);font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.term{font-family:var(--f-display);font-weight:700;font-size:clamp(1.8rem,6vw,2.6rem);line-height:1.15;text-wrap:balance;overflow-wrap:anywhere}
+.meaning{font-size:1.3rem;font-weight:500;text-wrap:balance}
+.example{margin-top:10px;color:var(--muted);font-style:italic;max-width:52ch;font-size:.92rem}
+.hint{position:absolute;bottom:12px;font-size:.75rem;color:var(--muted)}
+.chip{display:inline-block;font-size:.72rem;padding:1px 8px;border-radius:99px;border:1px solid currentColor}
+.chip.known{color:var(--good)} .chip.learning{color:var(--warn)}
+
+/* quiz */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:520px){.opts{grid-template-columns:1fr}}
+.opt{text-align:left;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit;padding:12px 14px;border-radius:8px;cursor:pointer;min-width:0}
+.opt.right{border-color:var(--good);box-shadow:inset 3px 0 0 var(--good)}
+.opt.wrong{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn);opacity:.8}
+.progress{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .3s}
+
+/* list */
+.list{display:flex;flex-direction:column}
+.item{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:12px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line)}
+.item b{font-family:var(--f-display);font-weight:500;font-size:1.05rem;overflow-wrap:anywhere}
+.item .m{min-width:0;overflow-wrap:anywhere}
+.item .acts{display:flex;gap:4px}
+.icon{border:0;background:none;color:var(--muted);cursor:pointer;font:inherit;padding:4px 6px;border-radius:6px}
+.icon:hover{color:var(--fg);background:var(--bg)}
+@media (max-width:520px){.item{grid-template-columns:minmax(0,1fr) auto}.item .m{grid-column:1/2;grid-row:2}}
+form{display:flex;flex-direction:column;gap:10px}
+label{font-size:.85rem;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:520px){.grid2{grid-template-columns:1fr}}
+h2{font-family:var(--f-display);font-weight:500;font-size:1.15rem;margin:0}
+.empty{text-align:center;padding:40px 16px;color:var(--muted)}
+/* review */
+.due-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.due-strip div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.due-strip b{display:block;font-family:var(--f-display);font-size:1.6rem;font-variant-numeric:tabular-nums;line-height:1.2}
+.due-strip span{font-size:.8rem;color:var(--muted)}
+.forecast{display:flex;align-items:flex-end;gap:6px;height:72px;padding-top:4px}
+.forecast .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;height:100%;justify-content:flex-end}
+.forecast .col i{display:block;width:100%;max-width:34px;background:var(--rule);border-radius:3px 3px 0 0;min-height:2px}
+.forecast .col:first-child i{background:var(--accent)}
+.forecast .col small{font-family:var(--f-mono);font-size:.68rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.rate{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:16px}
+.rate button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:500 .95rem var(--f-body);cursor:pointer}
+.rate button small{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);font-weight:400}
+.rate .again{border-color:var(--warn);color:var(--warn)}
+.rate .easy{border-color:var(--good);color:var(--good)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:.9rem;z-index:20}
+@media (prefers-reduced-motion:reduce){.card,.progress i{transition:none}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <h1><span>我的单词卡</span></h1>
+    <div class="stats" id="stats">正在加载…</div>
+  </header>
+
+  <div class="bar">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="review" aria-selected="true">复习</button>
+      <button role="tab" data-tab="cards" aria-selected="false">卡片</button>
+      <button role="tab" data-tab="quiz" aria-selected="false">测验</button>
+      <button role="tab" data-tab="list" aria-selected="false">词表</button>
+      <button role="tab" data-tab="add" aria-selected="false">添加</button>
+    </div>
+    <div class="row">
+      <select id="setFilter" aria-label="选择词组"></select>
+      <select id="statusFilter" aria-label="按状态筛选">
+        <option value="all">全部</option>
+        <option value="learning">还在学</option>
+        <option value="known">已掌握</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- REVIEW -->
+  <section id="tab-review">
+    <div id="reviewArea"></div>
+  </section>
+
+  <!-- CARDS -->
+  <section id="tab-cards" hidden>
+    <div id="cardArea"></div>
+  </section>
+
+  <!-- QUIZ -->
+  <section id="tab-quiz" hidden>
+    <div class="panel" id="quizArea"></div>
+  </section>
+
+  <!-- LIST -->
+  <section id="tab-list" hidden>
+    <div class="list" id="listArea"></div>
+  </section>
+
+  <!-- ADD -->
+  <section id="tab-add" hidden>
+    <div class="panel">
+      <h2 id="formTitle">添加一个单词</h2>
+      <form id="addForm">
+        <div class="grid2">
+          <label>单词或短语<input id="fTerm" required placeholder="例如 laudable"></label>
+          <label>中文意思<input id="fMeaning" required placeholder="例如 值得称赞的"></label>
+        </div>
+        <label>例句（可选）<input id="fExample" placeholder="书里的原句"></label>
+        <label>词组<input id="fSet" list="setList" placeholder="例如 Invisible Women"></label>
+        <datalist id="setList"></datalist>
+        <div class="row"><button class="btn primary" type="submit" id="fSubmit">保存</button><button class="btn" type="button" id="fCancel" hidden>取消编辑</button></div>
+      </form>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h2>批量导入</h2>
+      <p class="note" style="margin:0">每行一个，单词和意思之间用 Tab、“ - ” 或逗号隔开。从 Quizlet 导出的格式也能直接粘贴。</p>
+      <form id="bulkForm">
+        <textarea id="bulkText" placeholder="relentless - 持续不断的&#10;perpetuate - 使延续&#10;renowned, 著名的"></textarea>
+        <label>放进词组<input id="bulkSet" list="setList" placeholder="例如 Invisible Women 第二章"></label>
+        <div class="row"><button class="btn primary" type="submit">导入</button><span class="note" id="bulkPreview"></span></div>
+      </form>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h2>备份与示例</h2>
+      <p class="note" style="margin:0">单词和复习进度只存在这个浏览器里。换电脑、换浏览器或清理浏览器数据之前，先导出一份备份文件，到新的地方再导入。</p>
+      <div class="row">
+        <button class="btn" type="button" id="exportBtn">导出备份</button>
+        <label class="btn" style="flex-direction:row;color:var(--fg);font-size:.92rem" for="importFile">导入备份</label>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+        <button class="btn" type="button" id="sampleBtn">载入示例词表</button>
+      </div>
+    </div>
+  </section>
+
+  <p class="note" id="storeNote"></p>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="data/sample-words.js"></script>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  let cards = [];          // [{id, term, meaning, example, set, known, created}]
+  let store = null;        // {add, update, remove}
+  let loaded = false;
+  let tab = "review", idx = 0, order = [], editingId = null;
+  let quiz = null;
+  let rv = null;           // review session {queue:[ids], shown:bool, done:int}
+  const NEW_PER_DAY = 15;
+  const DAY = 86400000, MIN = 60000;
+
+  /* ---------- storage ---------- */
+  const LS = "wordcards.v1";
+  function lsRead(){ try { return JSON.parse(localStorage.getItem(LS) || "[]"); } catch { return []; } }
+  function lsWrite(){ try { localStorage.setItem(LS, JSON.stringify(cards)); } catch {} }
+  const localStore = {
+    async add(d){ cards.push({ id: "l" + Date.now() + Math.random().toString(36).slice(2,6), ...d }); lsWrite(); render(); },
+    async update(id, d){ const c = cards.find(x => x.id === id); if (c) Object.assign(c, d); lsWrite(); render(); },
+    async remove(id){ cards = cards.filter(x => x.id !== id); lsWrite(); render(); }
+  };
+
+  function initStore(){
+    store = localStore; cards = lsRead(); loaded = true;
+    $("#storeNote").textContent = "单词保存在这个浏览器里。换设备前记得在“添加”页导出备份。";
+    render();
+  }
+
+  /* ---------- helpers ---------- */
+  function sets(){ return [...new Set(cards.map(c => c.set || "未分组"))].sort(); }
+  function visible(){
+    const s = $("#setFilter").value, st = $("#statusFilter").value;
+    return cards
+      .filter(c => s === "__all" || (c.set || "未分组") === s)
+      .filter(c => st === "all" || (st === "known" ? c.known : !c.known))
+      .sort((a,b) => (a.created || 0) - (b.created || 0));
+  }
+  function toast(msg){ const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, 1800); }
+  function shuffle(a){ a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  /* ---------- spaced repetition (simplified SM-2) ---------- */
+  // srs = {ease, interval (days), reps, due (ms), last (ms), lapses}
+  function endOfToday(){ const d = new Date(); d.setHours(23,59,59,999); return d.getTime(); }
+  function startOfDay(t){ const d = new Date(t); d.setHours(0,0,0,0); return d.getTime(); }
+  function isNew(c){ return !c.srs; }
+  function isDue(c){ return c.srs && c.srs.due <= endOfToday(); }
+  function schedule(c, r){            // r: 0 忘了, 1 模糊, 2 记得, 3 很熟
+    const s = c.srs ? { ...c.srs } : { ease: 2.5, interval: 0, reps: 0, lapses: 0 };
+    const now = Date.now();
+    let days;
+    if (r === 0) { s.reps = 0; s.lapses = (s.lapses || 0) + 1; s.ease = Math.max(1.3, s.ease - 0.2); s.interval = 0; s.due = now + 10 * MIN; }
+    else {
+      if (r === 1) { days = s.reps === 0 ? 1 : Math.max(s.interval + 1, Math.round(s.interval * 1.2)); s.ease = Math.max(1.3, s.ease - 0.15); }
+      if (r === 2) { days = s.reps === 0 ? 1 : s.reps === 1 ? 3 : Math.max(s.interval + 1, Math.round(s.interval * s.ease)); }
+      if (r === 3) { days = s.reps === 0 ? 4 : Math.max(s.interval + 2, Math.round(s.interval * s.ease * 1.3)); s.ease = s.ease + 0.15; }
+      s.reps += 1; s.interval = days; s.due = startOfDay(now) + days * DAY + 4 * 3600000;
+    }
+    s.ease = Math.round(s.ease * 100) / 100; s.last = now;
+    return s;
+  }
+  function fmtGap(s){
+    if (s.interval === 0) return "10 分钟";
+    if (s.interval < 30) return s.interval + " 天";
+    if (s.interval < 365) return Math.round(s.interval / 30) + " 个月";
+    return (s.interval / 365).toFixed(1) + " 年";
+  }
+  function inSet(c){ const s = $("#setFilter").value; return s === "__all" || (c.set || "未分组") === s; }
+  function newToday(){ const t0 = startOfDay(Date.now()); return cards.filter(c => c.srs && c.srs.firstSeen >= t0).length; }
+  function buildQueue(){
+    const pool = cards.filter(inSet);
+    const due = pool.filter(isDue).sort((a,b) => a.srs.due - b.srs.due).map(c => c.id);
+    const room = Math.max(0, NEW_PER_DAY - newToday());
+    const fresh = pool.filter(isNew).sort((a,b) => (a.created||0) - (b.created||0)).slice(0, room).map(c => c.id);
+    return [...due, ...fresh];
+  }
+
+  function renderReview(){
+    const area = $("#reviewArea");
+    if (!cards.length) { area.innerHTML = emptyState(); return; }
+    if (rv && rv.queue.length) return renderReviewCard();
+    const pool = cards.filter(inSet);
+    const dueN = pool.filter(isDue).length;
+    const newN = Math.min(pool.filter(isNew).length, Math.max(0, NEW_PER_DAY - newToday()));
+    const learned = pool.filter(c => c.srs && c.srs.interval >= 21).length;
+    const t0 = startOfDay(Date.now());
+    const days = Array.from({length: 7}, (_, i) => {
+      const a = i === 0 ? -Infinity : t0 + i * DAY, b = t0 + (i + 1) * DAY;
+      return pool.filter(c => c.srs && c.srs.due >= a && c.srs.due < b).length;
+    });
+    const max = Math.max(1, ...days);
+    const wd = ["日","一","二","三","四","五","六"];
+    area.innerHTML = `
+      <div class="due-strip">
+        <div><b>${dueN}</b><span>今天要复习</span></div>
+        <div><b>${newN}</b><span>今天的新词</span></div>
+        <div><b>${learned}</b><span>长期记住（间隔 ≥ 21 天）</span></div>
+      </div>
+      <div class="panel" style="margin-top:14px">
+        ${rv && rv.done ? `<h2>今天这一轮完成了，复习了 ${rv.done} 次</h2>` : `<h2>${dueN + newN ? "开始今天的复习" : "今天没有要复习的词了"}</h2>`}
+        <p class="note" style="margin:0">每复习一个词，按你记得的程度打分。记得越牢，下次出现隔得越久：1 天、3 天、一周、几周……忘了的词 10 分钟后会再出现。每天最多学 ${NEW_PER_DAY} 个新词。</p>
+        <div>
+          <span class="note">未来 7 天要复习的词数</span>
+          <div class="forecast">${days.map((n, i) => `<div class="col"><small>${n}</small><i style="height:${Math.round(n / max * 44)}px"></i><small>${i === 0 ? "今天" : "周" + wd[new Date(t0 + i * DAY).getDay()]}</small></div>`).join("")}</div>
+        </div>
+        <div class="row"><button class="btn primary" id="rvStart" ${dueN + newN ? "" : "disabled"}>开始复习（${dueN + newN} 个）</button></div>
+      </div>`;
+    const b = $("#rvStart"); if (b) b.onclick = () => { rv = { queue: buildQueue(), shown: false, done: 0 }; renderReview(); };
+  }
+
+  function renderReviewCard(){
+    const area = $("#reviewArea");
+    const c = cards.find(x => x.id === rv.queue[0]);
+    if (!c) { rv.queue.shift(); return renderReview(); }
+    const opts = [0,1,2,3].map(r => schedule(c, r));
+    area.innerHTML = `
+      <div class="row" style="justify-content:space-between;margin-bottom:10px"><span class="note">还剩 ${rv.queue.length} 个 · 已复习 ${rv.done}</span>
+        <button class="icon" id="rvQuit">结束这一轮</button></div>
+      <div class="scene"><div class="card ${rv.shown ? "flipped" : ""}" id="card" tabindex="0" role="button" aria-label="显示答案">
+        <div class="face front"><span class="tag">${esc(c.set || "未分组")}</span><span class="pos">${isNew(c) ? `<span class="chip learning">新词</span>` : `<span class="chip known">复习</span>`}</span>
+          <div class="term">${esc(c.term)}</div><span class="hint">先回想意思，再点一下或按空格看答案</span></div>
+        <div class="face back"><span class="tag">${esc(c.term)}</span>
+          <div class="meaning">${esc(c.meaning)}</div>${c.example ? `<div class="example">${esc(c.example)}</div>` : ""}</div>
+      </div></div>
+      ${rv.shown ? `<div class="rate">
+        <button class="again" data-rate="0">忘了<small>${fmtGap(opts[0])}</small></button>
+        <button data-rate="1">模糊<small>${fmtGap(opts[1])}</small></button>
+        <button data-rate="2">记得<small>${fmtGap(opts[2])}</small></button>
+        <button class="easy" data-rate="3">很熟<small>${fmtGap(opts[3])}</small></button>
+      </div><p class="note" style="text-align:center;margin:8px 0 0">键盘：1 2 3 4 打分</p>`
+      : `<div class="row center" style="margin-top:16px"><button class="btn primary" id="rvShow">显示答案</button></div>`}`;
+    $("#card").onclick = showAnswer;
+    const s = $("#rvShow"); if (s) s.onclick = showAnswer;
+    area.querySelectorAll("[data-rate]").forEach(b => b.onclick = () => rate(+b.dataset.rate));
+    $("#rvQuit").onclick = () => { rv = { queue: [], shown: false, done: rv.done }; renderReview(); };
+  }
+  function showAnswer(){ if (!rv || rv.shown) return; rv.shown = true; renderReviewCard(); }
+  async function rate(r){
+    if (!rv || !rv.shown) return;
+    const c = cards.find(x => x.id === rv.queue[0]); if (!c) return;
+    const s = schedule(c, r);
+    if (!c.srs) s.firstSeen = Date.now(); else if (c.srs.firstSeen) s.firstSeen = c.srs.firstSeen;
+    const patch = { srs: s, known: s.interval >= 21 ? true : (r === 0 ? false : !!c.known) };
+    rv.queue.shift(); rv.done++; rv.shown = false;
+    if (r === 0) rv.queue.splice(Math.min(rv.queue.length, 4), 0, c.id);   // 忘了的词，几张卡之后再出现
+    try { await store.update(c.id, patch); } catch { toast("没保存成功，请再试一次"); }
+    renderReview();
+  }
+
+  /* ---------- render ---------- */
+  function renderFilters(){
+    const sel = $("#setFilter"), cur = sel.value || "__all";
+    const opts = [`<option value="__all">所有词组</option>`].concat(sets().map(s => `<option value="${esc(s)}">${esc(s)}</option>`));
+    sel.innerHTML = opts.join("");
+    sel.value = [...sel.options].some(o => o.value === cur) ? cur : "__all";
+    $("#setList").innerHTML = sets().map(s => `<option value="${esc(s)}">`).join("");
+  }
+
+  function render(){
+    renderFilters();
+    const known = cards.filter(c => c.known).length;
+    const dueAll = cards.filter(isDue).length;
+    $("#stats").textContent = loaded ? `${cards.length} 个词 · 已掌握 ${known} · 今天待复习 ${dueAll}` : "正在加载…";
+    if (tab === "review") renderReview();
+    const v = visible();
+    if (order.length !== v.length || !order.every(id => v.some(c => c.id === id))) { order = v.map(c => c.id); idx = Math.min(idx, Math.max(0, order.length - 1)); }
+    if (tab === "cards") renderCards();
+    if (tab === "list") renderList(v);
+    if (tab === "quiz" && !quiz) renderQuizStart();
+  }
+
+  function emptyState(){
+    return `<div class="panel empty">${loaded ? `这里还没有单词。<br>到“添加”里加第一个词，或者批量粘贴一组。` : "正在加载你的词库…"}
+      ${loaded ? `<div class="row center" style="margin-top:12px"><button class="btn primary" data-go="add">添加单词</button>${window.SAMPLE_SETS ? `<button class="btn" data-sample="1">载入示例词表</button>` : ""}</div>` : ""}</div>`;
+  }
+
+  function renderCards(){
+    const area = $("#cardArea");
+    if (!order.length) { area.innerHTML = emptyState(); return; }
+    const c = cards.find(x => x.id === order[idx]); if (!c) return;
+    area.innerHTML = `
+      <div class="scene"><div class="card" id="card" tabindex="0" role="button" aria-label="点击翻面">
+        <div class="face front"><span class="tag">${esc(c.set || "未分组")}</span><span class="pos">${idx + 1} / ${order.length}</span>
+          <div class="term">${esc(c.term)}</div><span class="hint">点击或按空格翻面</span></div>
+        <div class="face back"><span class="tag">${esc(c.term)}</span><span class="pos"><span class="chip ${c.known ? "known" : "learning"}">${c.known ? "已掌握" : "还在学"}</span></span>
+          <div class="meaning">${esc(c.meaning)}</div>${c.example ? `<div class="example">${esc(c.example)}</div>` : ""}</div>
+      </div></div>
+      <div class="row center" style="margin-top:16px">
+        <button class="btn" id="prev" ${idx === 0 ? "disabled" : ""}>← 上一个</button>
+        <button class="btn warn" id="learning">还在学</button>
+        <button class="btn good" id="knowIt">认识了</button>
+        <button class="btn" id="next" ${idx >= order.length - 1 ? "disabled" : ""}>下一个 →</button>
+      </div>
+      <div class="row center" style="margin-top:8px"><button class="icon" id="shuffle">打乱顺序</button><button class="icon" id="speak">朗读</button></div>`;
+    const card = $("#card");
+    card.onclick = () => card.classList.toggle("flipped");
+    $("#prev").onclick = () => { idx--; renderCards(); };
+    $("#next").onclick = () => { idx++; renderCards(); };
+    $("#shuffle").onclick = () => { order = shuffle(order); idx = 0; renderCards(); toast("已打乱"); };
+    $("#speak").onclick = () => { try { const u = new SpeechSynthesisUtterance(c.term); u.lang = "en-GB"; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch { toast("这个浏览器不支持朗读"); } };
+    const mark = async k => { try { await store.update(c.id, { known: k }); } catch { toast("没保存成功，请再试一次"); return; } if (idx < order.length - 1) idx++; renderCards(); };
+    $("#knowIt").onclick = () => mark(true);
+    $("#learning").onclick = () => mark(false);
+  }
+
+  function renderList(v){
+    const area = $("#listArea");
+    if (!v.length) { area.innerHTML = emptyState(); return; }
+    area.innerHTML = v.map(c => `<div class="item">
+      <b>${esc(c.term)}</b>
+      <div class="m">${esc(c.meaning)} ${c.known ? `<span class="chip known">已掌握</span>` : ""}</div>
+      <div class="acts"><button class="icon" data-edit="${esc(c.id)}">编辑</button><button class="icon" data-del="${esc(c.id)}">删除</button></div>
+    </div>`).join("");
+  }
+
+  /* ---------- quiz ---------- */
+  function renderQuizStart(){
+    const v = visible(), area = $("#quizArea");
+    if (v.length < 4) { area.innerHTML = `<div class="empty">测验至少需要 4 个词，现在这组有 ${v.length} 个。</div>`; return; }
+    area.innerHTML = `<h2>选择题测验</h2>
+      <p class="note" style="margin:0">看英文，从 4 个选项里选出正确的中文意思。答错的词会自动标成“还在学”。</p>
+      <div class="row"><label style="flex-direction:row;align-items:center;gap:8px">题数
+        <select id="qCount">${[10,20,v.length].filter((n,i,a)=>n<=v.length&&a.indexOf(n)===i).map(n=>`<option value="${n}">${n === v.length ? "全部 " + n : n}</option>`).join("")}</select></label>
+        <label style="flex-direction:row;align-items:center;gap:8px">方向
+        <select id="qDir"><option value="en">英 → 中</option><option value="zh">中 → 英</option></select></label>
+        <button class="btn primary" id="qStart">开始</button></div>`;
+    $("#qStart").onclick = () => {
+      const n = +$("#qCount").value;
+      quiz = { items: shuffle(v).slice(0, n), pool: v, i: 0, score: 0, wrong: [], dir: $("#qDir").value, answered: false };
+      renderQuestion();
+    };
+  }
+  function renderQuestion(){
+    const q = quiz, area = $("#quizArea");
+    if (q.i >= q.items.length) {
+      area.innerHTML = `<h2>完成！答对 ${q.score} / ${q.items.length}</h2>
+        ${q.wrong.length ? `<div class="list">${q.wrong.map(c => `<div class="item"><b>${esc(c.term)}</b><div class="m">${esc(c.meaning)}</div><span></span></div>`).join("")}</div>` : `<p class="note">全部答对了。</p>`}
+        <div class="row"><button class="btn primary" id="qAgain">再来一轮</button>${q.wrong.length ? `<button class="btn" id="qWrong">只练错题</button>` : ""}</div>`;
+      $("#qAgain").onclick = () => { quiz = null; renderQuizStart(); };
+      const w = $("#qWrong"); if (w) w.onclick = () => { quiz = { ...q, items: shuffle(q.wrong), i: 0, score: 0, wrong: [], answered: false }; renderQuestion(); };
+      return;
+    }
+    const c = q.items[q.i], en = q.dir === "en";
+    const distract = shuffle(q.pool.filter(x => x.id !== c.id)).slice(0, 3);
+    const opts = shuffle([c, ...distract]);
+    area.innerHTML = `<div class="row" style="justify-content:space-between"><span class="note">第 ${q.i + 1} / ${q.items.length} 题</span><span class="note">答对 ${q.score}</span></div>
+      <div class="progress"><i style="width:${q.i / q.items.length * 100}%"></i></div>
+      <div class="term" style="text-align:center;padding:16px 0">${esc(en ? c.term : c.meaning)}</div>
+      <div class="opts">${opts.map(o => `<button class="opt" data-id="${esc(o.id)}">${esc(en ? o.meaning : o.term)}</button>`).join("")}</div>
+      <div id="qFeedback" class="row" style="min-height:40px;justify-content:space-between"></div>`;
+    q.answered = false;
+    area.querySelectorAll(".opt").forEach(b => b.onclick = async () => {
+      if (q.answered) return; q.answered = true;
+      const ok = b.dataset.id === c.id;
+      area.querySelectorAll(".opt").forEach(x => { if (x.dataset.id === c.id) x.classList.add("right"); });
+      if (ok) q.score++; else { b.classList.add("wrong"); q.wrong.push(c); if (c.known) store.update(c.id, { known: false }).catch(() => {}); }
+      $("#qFeedback").innerHTML = `<span style="color:var(${ok ? "--good" : "--warn"})">${ok ? "答对了！" : "正确答案：" + esc(en ? c.meaning : c.term)}</span>${c.example ? "" : ""}<button class="btn primary" id="qNext">下一题</button>`;
+      $("#qNext").onclick = () => { q.i++; renderQuestion(); };
+      $("#qNext").focus();
+    });
+  }
+
+  /* ---------- tabs & events ---------- */
+  function go(t){
+    tab = t;
+    document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+    ["review","cards","quiz","list","add"].forEach(n => $("#tab-" + n).hidden = n !== t);
+    if (t === "quiz") quiz = null;
+    if (t === "review" && rv && !rv.queue.length) rv = null;
+    render();
+  }
+  document.querySelector(".tabs").onclick = e => { const b = e.target.closest("button"); if (b) go(b.dataset.tab); };
+  document.addEventListener("click", async e => {
+    const g = e.target.closest("[data-go]"); if (g) go(g.dataset.go);
+    const d = e.target.closest("[data-del]");
+    if (d) {
+      if (d.dataset.confirm !== "1") { d.dataset.confirm = "1"; d.textContent = "确认删除"; setTimeout(() => { d.dataset.confirm = ""; d.textContent = "删除"; }, 2500); return; }
+      try { await store.remove(d.dataset.del); toast("已删除"); } catch { toast("删除失败"); }
+    }
+    const ed = e.target.closest("[data-edit]");
+    if (ed) {
+      const c = cards.find(x => x.id === ed.dataset.edit); if (!c) return;
+      editingId = c.id; go("add");
+      $("#fTerm").value = c.term; $("#fMeaning").value = c.meaning; $("#fExample").value = c.example || ""; $("#fSet").value = c.set || "";
+      $("#formTitle").textContent = "编辑单词"; $("#fSubmit").textContent = "保存修改"; $("#fCancel").hidden = false;
+    }
+  });
+  function resetForm(){ editingId = null; $("#addForm").reset(); $("#formTitle").textContent = "添加一个单词"; $("#fSubmit").textContent = "保存"; $("#fCancel").hidden = true; }
+  $("#fCancel").onclick = resetForm;
+  $("#setFilter").onchange = $("#statusFilter").onchange = () => { idx = 0; quiz = null; rv = null; render(); };
+
+  $("#addForm").onsubmit = async e => {
+    e.preventDefault();
+    const d = { term: $("#fTerm").value.trim(), meaning: $("#fMeaning").value.trim(), example: $("#fExample").value.trim(), set: $("#fSet").value.trim() || "未分组" };
+    if (!d.term || !d.meaning) return;
+    try {
+      if (editingId) { await store.update(editingId, d); toast("已保存修改"); resetForm(); }
+      else { await store.add({ ...d, known: false, created: Date.now() }); toast("已添加 " + d.term); const keep = d.set; $("#addForm").reset(); $("#fSet").value = keep; $("#fTerm").focus(); }
+    } catch { toast("没保存成功，请再试一次"); }
+  };
+
+  function parseBulk(text){
+    return text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => {
+      let p = l.split("\t"); if (p.length < 2) p = l.split(/\s+[-–—]\s+/); if (p.length < 2) p = l.split(/[,，]/);
+      if (p.length < 2) return null;
+      return { term: p[0].trim(), meaning: p.slice(1).join(", ").trim() };
+    }).filter(x => x && x.term && x.meaning);
+  }
+  $("#bulkText").oninput = () => { const n = parseBulk($("#bulkText").value).length; $("#bulkPreview").textContent = n ? `识别到 ${n} 个词` : ""; };
+  $("#bulkForm").onsubmit = async e => {
+    e.preventDefault();
+    const items = parseBulk($("#bulkText").value); if (!items.length) { toast("没识别到单词，检查一下分隔符"); return; }
+    const set = $("#bulkSet").value.trim() || "未分组"; let t = Date.now(), ok = 0;
+    for (const it of items) { try { await store.add({ ...it, example: "", set, known: false, created: t++ }); ok++; } catch {} }
+    toast(`已导入 ${ok} 个词`); $("#bulkText").value = ""; $("#bulkPreview").textContent = "";
+  };
+
+  function loadSample(){
+    const sets = window.SAMPLE_SETS || [];
+    let t = Date.now(), n = 0;
+    for (const g of sets) for (const w of g.words) {
+      if (cards.some(c => c.term === w.term && (c.set || "") === g.set)) continue;
+      cards.push({ id: "l" + (t) + Math.random().toString(36).slice(2,6), term: w.term, meaning: w.meaning, example: w.example || "", set: g.set, known: false, created: t++ });
+      n++;
+    }
+    lsWrite(); render(); toast(n ? `已载入 ${n} 个示例词` : "示例词都已经在词库里了");
+  }
+  document.addEventListener("click", e => { if (e.target.closest("[data-sample]")) loadSample(); });
+  $("#sampleBtn").onclick = loadSample;
+  $("#exportBtn").onclick = () => {
+    const blob = new Blob([JSON.stringify({ app: "word-cards", version: 1, exported: new Date().toISOString(), cards }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "word-cards-" + new Date().toISOString().slice(0,10) + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast("备份已下载");
+  };
+  $("#importFile").onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      const list = Array.isArray(data) ? data : data.cards;
+      if (!Array.isArray(list)) throw 0;
+      let n = 0, t = Date.now();
+      for (const c of list) {
+        if (!c || !c.term || !c.meaning) continue;
+        const i = cards.findIndex(x => (c.id && x.id === c.id) || (x.term === c.term && (x.set || "") === (c.set || "")));
+        const row = { known: false, example: "", set: "未分组", created: t++, ...c };
+        if (!row.id) row.id = "l" + t + Math.random().toString(36).slice(2,6);
+        if (i >= 0) cards[i] = row; else cards.push(row);
+        n++;
+      }
+      lsWrite(); render(); toast(`已导入 ${n} 个词`);
+    } catch { toast("这个文件读不出来，请选择导出的 .json 备份"); }
+    e.target.value = "";
+  };
+
+  document.addEventListener("keydown", e => {
+    if (tab === "review" && rv && rv.queue.length && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); showAnswer(); }
+      if (["1","2","3","4"].includes(e.key)) rate(+e.key - 1);
+      return;
+    }
+    if (tab !== "cards" || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+    if (e.key === " ") { e.preventDefault(); $("#card")?.classList.toggle("flipped"); }
+    if (e.key === "ArrowRight" && idx < order.length - 1) { idx++; renderCards(); }
+    if (e.key === "ArrowLeft" && idx > 0) { idx--; renderCards(); }
+  });
+
+  render();
+  initStore();
+})();
+</script>
+</body>
+</html>
