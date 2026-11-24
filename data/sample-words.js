@@ -1,4 +1,4 @@
-// 示例词表：《Invisible Women》第一章的词汇。可以照这个格式加别的词组。
+// Example word set: vocabulary from Chapter 1 of Invisible Women. Add more word sets using the same format.
 window.SAMPLE_SETS = [
   {
     "set": "Invisible Women",
